@@ -45,3 +45,4 @@ build/
 
 # Developmenet directory
 .dev/
+*#*

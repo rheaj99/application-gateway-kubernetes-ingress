@@ -1,0 +1,69 @@
+trigger:
+  - master
+  - draychev/add-azure-pipelines
+
+pool:
+  vmImage: 'Ubuntu-16.04'
+
+variables:
+  GOBIN: '$(GOPATH)/bin'
+  GOROOT: '/usr/local/go'
+  GOPATH: '$(system.defaultWorkingDirectory)/gopath' # Go workspace path
+  modulePath: '$(GOPATH)/src/github.com/$(build.repository.name)' # Path to the module's code
+  GOOS: 'linux'
+  GO111MODULE: 'on'
+  GO_PROJ: 'github.com/Azure/$(build.repository.name)'
+
+steps:
+
+  - script: |
+      # sudo apt-get update && sudo apt-get -y upgrade  # Too slow
+      wget https://dl.google.com/go/go1.12.4.linux-amd64.tar.gz
+      tar -xvf go1.12.4.linux-amd64.tar.gz
+      sudo mv go /usr/local
+    displayName: 'Install Go 1.12'
+
+  - script: |
+      mkdir -p '$(GOBIN)'
+      mkdir -p '$(GOPATH)/pkg'
+      mkdir -p '$(modulePath)'
+      shopt -s extglob
+      mv !(gopath) '$(modulePath)'
+      echo '##vso[task.prependpath]$(GOBIN)'
+      echo '##vso[task.prependpath]$(GOROOT)/bin'
+    displayName: 'Set up the Go workspace'
+
+  - script: |
+      rm -rf vendor
+      go mod vendor
+    workingDirectory: '$(modulePath)'
+    displayName: 'Fetch Go dependencies'
+
+  - script: |
+      go get -u golang.org/x/lint/golint
+      golint $(find . -type f -name '*.go' -not -path "./vendor/*")
+    workingDirectory: '$(modulePath)'
+    displayName: 'Go lint'
+
+  - script: |
+      go vet -v ./...
+    workingDirectory: '$(modulePath)'
+    displayName: 'Go vet'
+
+  - script: |
+      go get golang.org/x/tools/cmd/goimports
+      goimports -d $(find . -type f -name '*.go' -not -path "./vendor/*") > /tmp/goimports.out
+      if [ -s /tmp/goimports.out ]; then exit 1; fi
+    workingDirectory: '$(modulePath)'
+    displayName: 'Go imports'
+
+  - script: |
+      unformatted=$(go fmt ./...)
+      if [ ! -z "$unformatted" ]; then exit 1; fi
+    workingDirectory: '$(modulePath)'
+    displayName: 'Go fmt'
+
+  - script: |
+     go test -v $(go list ./... | grep -v test/e2e)
+    workingDirectory: '$(modulePath)'
+    displayName: 'Run tests; skip e2e'
