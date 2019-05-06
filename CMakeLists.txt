@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 2.8.9)
 project(application-gateway-kubernetes-ingress)
 string(TOLOWER ${CMAKE_PROJECT_NAME} project_name_lowercase)
 
+set(PKGS_TO_TEST "./..." CACHE STRING "Package or packages for which to run Go unit tests")
+
 set(package_name "github.com/Azure/application-gateway-kubernetes-ingress")
 set(devenv_image_name "${project_name_lowercase}-dev")
 set(devenv_workpath "/gopath/src/${package_name}")
@@ -82,7 +84,7 @@ add_custom_target(go-tests
             -v ${CMAKE_SOURCE_DIR}:${devenv_workpath}
             -w ${devenv_workpath}
             --name ${devenv_image_name}-devenv ${devenv_image_name}
-            go test -v ./...
+            go test -v ${PKGS_TO_TEST}
     DEPENDS appgw-ingress
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
