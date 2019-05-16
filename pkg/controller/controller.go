@@ -12,15 +12,14 @@ import (
 
 	"github.com/Azure/application-gateway-kubernetes-ingress/pkg/appgw"
 	"github.com/Azure/application-gateway-kubernetes-ingress/pkg/k8scontext"
-	"github.com/Azure/azure-sdk-for-go/services/network/mgmt/2018-12-01/network"
-	"github.com/Azure/go-autorest/autorest/to"
+	n "github.com/Azure/azure-sdk-for-go/services/network/mgmt/2018-12-01/network"
 	"github.com/eapache/channels"
 	"github.com/golang/glog"
 )
 
 // AppGwIngressController configures the application gateway based on the ingress rules defined.
 type AppGwIngressController struct {
-	appGwClient     network.ApplicationGatewaysClient
+	appGwClient     n.ApplicationGatewaysClient
 	appGwIdentifier appgw.Identifier
 
 	k8sContext       *k8scontext.Context
@@ -28,16 +27,21 @@ type AppGwIngressController struct {
 
 	eventQueue *EventQueue
 
+	appGwConfigCache *[]byte
+
 	stopChannel chan struct{}
 }
 
 // NewAppGwIngressController constructs a controller object.
-func NewAppGwIngressController(appGwClient network.ApplicationGatewaysClient, appGwIdentifier appgw.Identifier, k8sContext *k8scontext.Context) *AppGwIngressController {
+func NewAppGwIngressController(appGwClient n.ApplicationGatewaysClient, appGwIdentifier appgw.Identifier, k8sContext *k8scontext.Context, configCache *[]byte) *AppGwIngressController {
 	controller := &AppGwIngressController{
 		appGwClient:      appGwClient,
 		appGwIdentifier:  appGwIdentifier,
 		k8sContext:       k8sContext,
 		k8sUpdateChannel: k8sContext.UpdateChannel,
+
+		// TODO(draychev): One we separate AppGwIngressController and EventQueue this could become internal to the controller.
+		appGwConfigCache: configCache,
 	}
 	controller.eventQueue = NewEventQueue(controller)
 	return controller
@@ -103,36 +107,12 @@ func (c AppGwIngressController) Process(event QueuedEvent) error {
 
 	addTags(&appGw)
 
-	glog.V(1).Info("BEGIN ApplicationGateway deployment")
-	defer glog.V(1).Info("END ApplicationGateway deployment")
-
-	deploymentStart := time.Now()
-	// Initiate deployment
-	appGwFuture, err := c.appGwClient.CreateOrUpdate(ctx, c.appGwIdentifier.ResourceGroup, c.appGwIdentifier.AppGwName, appGw)
-	if err != nil {
-		glog.Warningf("unable to send CreateOrUpdate request, error [%v]", err.Error())
-		return errors.New("unable to send CreateOrUpdate request")
+	if c.configHasChanged(ctx, &appGw) {
+		glog.Infoln("The config has changed! Will apply config changes to App Gwy.")
+		return c.deployConfig(ctx, &appGw)
 	}
-
-	// Wait until deployment finshes and save the error message
-	err = appGwFuture.WaitForCompletionRef(ctx, c.appGwClient.BaseClient.Client)
-	glog.V(1).Infof("deployment took %+v", time.Now().Sub(deploymentStart).String())
-
-	if err != nil {
-		glog.Warningf("unable to deploy ApplicationGateway, error [%v]", err.Error())
-		return errors.New("unable to deploy ApplicationGateway")
-	}
-
+	glog.Infoln("The config has NOT changed! Will not apply any changes to App Gwy.")
 	return nil
-}
-
-// addTags will add certain tags to Application Gateway
-func addTags(appGw *network.ApplicationGateway) {
-	if appGw.Tags == nil {
-		appGw.Tags = make(map[string]*string)
-	}
-	// Identify the App Gateway as being exclusively managed by a Kubernetes Ingress.
-	appGw.Tags[isManagedByK8sIngress] = to.StringPtr("true")
 }
 
 // Start function runs the k8scontext and continues to listen to the

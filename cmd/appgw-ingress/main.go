@@ -116,7 +116,9 @@ func main() {
 	}
 
 	ctx := k8scontext.NewContext(kubeClient, namespace, *resyncPeriod)
-	appGwController := controller.NewAppGwIngressController(appGwClient, appGwIdentifier, ctx)
+	// TODO(draychev): understand why this needs to be allocated outside of NewAppGwIngressController
+	configCache := make([]byte, 0)
+	appGwController := controller.NewAppGwIngressController(appGwClient, appGwIdentifier, ctx, &configCache)
 
 	go appGwController.Start()
 

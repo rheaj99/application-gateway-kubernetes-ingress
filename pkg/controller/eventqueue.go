@@ -43,15 +43,13 @@ type QueuedEvent struct {
 // NewEventQueue creates an EventQueue with a callback function. The callback
 // function processFunc is executed for each event in the queue.
 func NewEventQueue(processor EventProcessor) *EventQueue {
-	q := &EventQueue{
+	return &EventQueue{
 		EventProcessor: processor,
 
 		queue:              workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
 		workerFinished:     make(chan struct{}),
 		lastEventTimestamp: int64(0),
 	}
-
-	return q
 }
 
 // EnqueueCanSkip adds an event with parameter el as payload. User can specify if
@@ -67,13 +65,11 @@ func (q *EventQueue) EnqueueCanSkip(el k8scontext.Event, skip bool) {
 
 	glog.V(1).Infof("Enqueuing skip(%v) item", skip)
 
-	v := QueuedEvent{
+	q.queue.Add(QueuedEvent{
 		Event:     el,
 		Timestamp: now,
 		CanSkip:   skip,
-	}
-
-	q.queue.Add(v)
+	})
 }
 
 // Enqueue adds an non-skipable event with parameter el as payload.
