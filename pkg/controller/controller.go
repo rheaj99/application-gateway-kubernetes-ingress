@@ -10,6 +10,8 @@ import (
 	"errors"
 	"time"
 
+	"k8s.io/client-go/tools/record"
+
 	"github.com/Azure/application-gateway-kubernetes-ingress/pkg/appgw"
 	"github.com/Azure/application-gateway-kubernetes-ingress/pkg/k8scontext"
 	"github.com/Azure/azure-sdk-for-go/services/network/mgmt/2018-12-01/network"
@@ -29,16 +31,20 @@ type AppGwIngressController struct {
 	eventQueue *EventQueue
 
 	stopChannel chan struct{}
+
+	recorder record.EventRecorder
 }
 
 // NewAppGwIngressController constructs a controller object.
-func NewAppGwIngressController(appGwClient network.ApplicationGatewaysClient, appGwIdentifier appgw.Identifier, k8sContext *k8scontext.Context) *AppGwIngressController {
+func NewAppGwIngressController(appGwClient network.ApplicationGatewaysClient, appGwIdentifier appgw.Identifier, k8sContext *k8scontext.Context, recorder *record.EventRecorder) *AppGwIngressController {
 	controller := &AppGwIngressController{
 		appGwClient:      appGwClient,
 		appGwIdentifier:  appGwIdentifier,
 		k8sContext:       k8sContext,
 		k8sUpdateChannel: k8sContext.UpdateChannel,
+		recorder:         *recorder,
 	}
+
 	controller.eventQueue = NewEventQueue(controller)
 	return controller
 }
@@ -58,7 +64,7 @@ func (c AppGwIngressController) Process(event QueuedEvent) error {
 	}
 
 	// Create a configbuilder based on current appgw config
-	configBuilder := appgw.NewConfigBuilder(c.k8sContext, &c.appGwIdentifier, appGw.ApplicationGatewayPropertiesFormat)
+	configBuilder := appgw.NewConfigBuilder(c.k8sContext, &c.appGwIdentifier, appGw.ApplicationGatewayPropertiesFormat, &c.recorder)
 
 	// Get all the ingresses
 	ingressList := c.k8sContext.GetHTTPIngressList()

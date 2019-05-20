@@ -6,6 +6,7 @@
 package appgw
 
 import (
+	"k8s.io/client-go/tools/record"
 	"github.com/Azure/application-gateway-kubernetes-ingress/pkg/k8scontext"
 	"github.com/Azure/application-gateway-kubernetes-ingress/pkg/utils"
 	"github.com/Azure/azure-sdk-for-go/services/network/mgmt/2018-12-01/network"
@@ -40,10 +41,11 @@ type appGwConfigBuilder struct {
 	k8sContext      *k8scontext.Context
 	appGwIdentifier Identifier
 	appGwConfig     network.ApplicationGatewayPropertiesFormat
+	recorder record.EventRecorder
 }
 
 // NewConfigBuilder construct a builder
-func NewConfigBuilder(context *k8scontext.Context, appGwIdentifier *Identifier, originalConfig *network.ApplicationGatewayPropertiesFormat) ConfigBuilder {
+func NewConfigBuilder(context *k8scontext.Context, appGwIdentifier *Identifier, originalConfig *network.ApplicationGatewayPropertiesFormat, recorder *record.EventRecorder) ConfigBuilder {
 	return &appGwConfigBuilder{
 		serviceBackendPairMap:         make(map[backendIdentifier](serviceBackendPortPair)),
 		httpListenersMap:              make(map[frontendListenerIdentifier](*network.ApplicationGatewayHTTPListener)),
@@ -56,6 +58,7 @@ func NewConfigBuilder(context *k8scontext.Context, appGwIdentifier *Identifier, 
 		k8sContext:                    context,
 		appGwIdentifier:               *appGwIdentifier,
 		appGwConfig:                   *originalConfig,
+		recorder:					   *recorder,
 	}
 }
 
